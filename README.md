@@ -6,6 +6,12 @@ A complete Java 17 / Spring Boot application that searches a local saree collect
 
 The project has been populated from the supplied folder with 132 JPG/JPEG saree images. They are copied under `saree-images/` with their source colour folders preserved. You can add more JPG, JPEG, or PNG files anywhere under this directory; the reindex operation finds them recursively.
 
+## GitHub Pages matching
+
+The published GitHub Pages site works without a Java server. `catalog.js` contains the 132 indexed collection images and their collection colour. When a visitor uploads an image, the browser samples its pixels, detects up to three dominant colours, ranks the collection locally, and displays matching saree cards. No uploaded image is sent to a server.
+
+After adding files to the collection, update `src/main/resources/static/catalog.js` (or run the Spring Boot reindex endpoint for the database-backed deployment) and commit the change.
+
 ## Architecture
 
 `HTML/CSS/JavaScript → POST /api/sarees/search → SareeController → SareeService → OpenCV HSV analysis → MySQL SareeRepository → similarity-ranked JSON → gallery`
