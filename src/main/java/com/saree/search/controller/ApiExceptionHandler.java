@@ -1,11 +1,11 @@
 package com.saree.search.controller;
 
-import org.springframework.http.*; import org.springframework.web.bind.annotation.*; import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.http.*; import org.springframework.web.bind.annotation.*; import org.springframework.web.multipart.MaxUploadSizeExceededException; import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import java.util.*;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
-  @ExceptionHandler({IllegalArgumentException.class, org.springframework.web.bind.MissingServletRequestPartException.class})
+  @ExceptionHandler({IllegalArgumentException.class, MissingServletRequestPartException.class})
   ResponseEntity<Map<String,String>> badRequest(Exception e) { return response(HttpStatus.BAD_REQUEST, e.getMessage() == null ? "Invalid request." : e.getMessage()); }
   @ExceptionHandler(MaxUploadSizeExceededException.class) ResponseEntity<Map<String,String>> tooLarge(MaxUploadSizeExceededException e) { return response(HttpStatus.PAYLOAD_TOO_LARGE,"Image must be 10 MB or smaller."); }
   @ExceptionHandler(NoSuchElementException.class) ResponseEntity<Map<String,String>> missing(NoSuchElementException e) { return response(HttpStatus.NOT_FOUND,e.getMessage()); }

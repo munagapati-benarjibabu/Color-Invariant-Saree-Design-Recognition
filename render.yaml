@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: saree-ai-search
+    runtime: docker
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: demo
+      - key: SAREE_ADMIN_TOKEN
+        generateValue: true

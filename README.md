@@ -26,6 +26,10 @@ docker compose up --build
 
 Or run MySQL yourself and start with `mvn spring-boot:run`. Database settings are read from `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`; no credential is committed to the repository.
 
+## Deploy
+
+GitHub Pages can host the old static colour-only demo, but it **cannot run the Java API** needed for visual design search, filters, uploads, and evaluation. Deploy the included `render.yaml` as a Render Blueprint (or deploy the Docker image on any container host). It uses the `demo` profile with an embedded H2 database and automatically indexes the included images at startup. Use Docker Compose with MySQL for persistent production data.
+
 Open http://localhost:8080. Rebuild the starter index after first startup:
 
 ```bash
