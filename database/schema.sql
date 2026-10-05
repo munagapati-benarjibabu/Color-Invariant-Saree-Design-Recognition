@@ -9,6 +9,13 @@ CREATE TABLE IF NOT EXISTS sarees (
   secondary_color VARCHAR(32),
   primary_color_percentage DECIMAL(5,2) NOT NULL,
   secondary_color_percentage DECIMAL(5,2),
+  saree_type VARCHAR(100),
+  fabric VARCHAR(100),
+  pattern VARCHAR(100),
+  occasion VARCHAR(100),
+  price DECIMAL(10,2),
+  in_stock BOOLEAN NOT NULL DEFAULT TRUE,
+  design_signature VARCHAR(1000),
   PRIMARY KEY (id),
   UNIQUE KEY uk_saree_image_name (image_name)
 );

@@ -1,6 +1,7 @@
 package com.saree.search.service;
 
 import com.saree.search.dto.ColorInfo;
+import com.saree.search.dto.VisualAnalysis;
 import org.bytedeco.opencv.opencv_core.Mat;
 import org.bytedeco.javacpp.BytePointer;
 import org.springframework.stereotype.Service;
@@ -12,23 +13,41 @@ import static org.bytedeco.opencv.global.opencv_core.*;
 
 @Service
 public class ColorDetectionService {
-  public List<ColorInfo> detect(Path file) {
+  public List<ColorInfo> detect(Path file) { return analyse(file).colors(); }
+  /** Foreground-biased, colour-invariant texture descriptor. No uploaded image leaves this server. */
+  public VisualAnalysis analyse(Path file) {
     Mat source = imread(file.toString(), IMREAD_COLOR);
     if (source.empty()) throw new IllegalArgumentException("The uploaded file is not a readable image.");
     Mat resized = new Mat(); Mat hsv = new Mat();
     resize(source, resized, new org.bytedeco.opencv.opencv_core.Size(240, 240));
     cvtColor(resized, hsv, COLOR_BGR2HSV);
-    Map<String, Integer> counts = new HashMap<>(); int usable = 0;
-    for (int y = 0; y < hsv.rows(); y += 2) for (int x = 0; x < hsv.cols(); x += 2) {
+    Map<String, Integer> counts = new HashMap<>(); int usable = 0, eligible = 0;
+    double[] grid = new double[4], orientation = new double[4];
+    for (int y = 3; y < hsv.rows() - 3; y += 2) for (int x = 3; x < hsv.cols() - 3; x += 2) {
+      // Product-photo background is most often around the outer boundary.
+      if (x < 19 || x > 220 || y < 19 || y > 220) continue;
       BytePointer pixel = hsv.ptr(y, x);
       int h = pixel.get(0) & 0xff, s = pixel.get(1) & 0xff, v = pixel.get(2) & 0xff;
-      String name = classify(h, s, v); if (name != null) { counts.merge(name, 1, Integer::sum); usable++; }
+      eligible++;
+      // Exclude neutral white only at the crop edge; a central white saree stays searchable.
+      if (v > 246 && s < 12 && (x < 45 || x > 195 || y < 45 || y > 195)) continue;
+      String name = classify(h, s, v); counts.merge(name, 1, Integer::sum); usable++;
+      int left=hsv.ptr(y,x-3).get(2)&255, right=hsv.ptr(y,x+3).get(2)&255;
+      int up=hsv.ptr(y-3,x).get(2)&255, down=hsv.ptr(y+3,x).get(2)&255;
+      double dx=right-left, dy=down-up, magnitude=Math.min(255,Math.hypot(dx,dy))/255.0;
+      grid[(y < 120 ? 0 : 2) + (x < 120 ? 0 : 1)] += magnitude;
+      if(magnitude>.10) { double angle=(Math.atan2(dy,dx)+Math.PI)%Math.PI; orientation[Math.min(3,(int)(angle/(Math.PI/4)))] += magnitude; }
     }
     source.release(); resized.release(); hsv.release();
     if (usable == 0) throw new IllegalArgumentException("No usable colour pixels were found in this image.");
     final int total = usable;
-    return counts.entrySet().stream().map(e -> new ColorInfo(e.getKey(), round(e.getValue() * 100.0 / total)))
+    List<ColorInfo> colors = counts.entrySet().stream().map(e -> new ColorInfo(e.getKey(), round(e.getValue() * 100.0 / total)))
       .filter(c -> c.percentage() >= 3).sorted(Comparator.comparingDouble(ColorInfo::percentage).reversed()).limit(3).toList();
+    double[] signature = new double[8]; double norm=Math.max(1,usable);
+    for(int i=0;i<4;i++){ signature[i]=grid[i]/norm; signature[i+4]=orientation[i]/norm; }
+    double length=Math.sqrt(Arrays.stream(signature).map(v->v*v).sum()); if(length>0) for(int i=0;i<signature.length;i++) signature[i]/=length;
+    double texture=Arrays.stream(grid).sum()/norm;
+    return new VisualAnalysis(colors,signature,round(usable*100.0/Math.max(1,eligible)),texture>.32?"detailed / textured":texture>.18?"patterned":"minimal / smooth");
   }
   private String classify(int h, int s, int v) {
     if (v < 45) return "BLACK";

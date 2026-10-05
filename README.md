@@ -1,80 +1,56 @@
-# Saree AI Search
+# Saree AI — colour-invariant visual search
 
-A complete Java 17 / Spring Boot application that searches a local saree collection by dominant colour. It uses OpenCV to convert images to HSV, classifies significant colours, stores the top two colour signals in MySQL, and ranks the collection by colour and percentage similarity.
+Search a saree catalogue from an uploaded image using a foreground-biased visual descriptor. Results use design/texture similarity first, with colour as an optional signal. The app keeps image analysis on the server; it does not send customer images to a third-party AI service.
 
-## Included dataset
+## What is included
 
-The project has been populated from the supplied folder with 132 JPG/JPEG saree images. They are copied under `saree-images/` with their source colour folders preserved. You can add more JPG, JPEG, or PNG files anywhere under this directory; the reindex operation finds them recursively.
+- **Design-based retrieval:** a compact, colour-invariant luminance-edge and texture signature makes different dye colours comparable.
+- **Foreground-aware analysis:** a conservative central crop and studio-background suppression reduce influence from borders, mannequins, and white backdrops.
+- **Colour swap:** select *Same design, different colour* or use the action on a result card.
+- **Metadata filters:** type, fabric, pattern, occasion, price, and availability.
+- **Explanations:** every result reports its design/texture and colour contributions.
+- **Catalogue tooling:** protected image upload and metadata endpoints; reindexing records a signature and starter metadata.
+- **Evaluation dashboard API:** reports catalogue, signature, and metadata coverage.
+- **Production basics:** Docker Compose, environment-based secrets, health endpoint, CI workflow, request limits, and protected write endpoints.
 
-## GitHub Pages matching
+> This version deliberately uses an on-device/server visual descriptor rather than claiming semantic CLIP recognition. For stronger semantic pattern search, replace the descriptor through a CLIP/SigLIP embedding provider and a vector database; the persisted `design_signature` boundary is designed for that upgrade.
 
-The published GitHub Pages site works without a Java server. `catalog.js` contains the 132 indexed collection images and their collection colour. When a visitor uploads an image, the browser samples its pixels, detects up to three dominant colours, ranks the collection locally, and displays matching saree cards. No uploaded image is sent to a server.
+## Run locally
 
-After adding files to the collection, update `src/main/resources/static/catalog.js` (or run the Spring Boot reindex endpoint for the database-backed deployment) and commit the change.
+```bash
+cp .env.example .env
+# Set DB_PASSWORD and a long SAREE_ADMIN_TOKEN in .env
+mvn clean package
+docker compose up --build
+```
 
-## Architecture
+Or run MySQL yourself and start with `mvn spring-boot:run`. Database settings are read from `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`; no credential is committed to the repository.
 
-`HTML/CSS/JavaScript → POST /api/sarees/search → SareeController → SareeService → OpenCV HSV analysis → MySQL SareeRepository → similarity-ranked JSON → gallery`
+Open http://localhost:8080. Rebuild the starter index after first startup:
 
-The colour detector samples a resized image in HSV space, separates neutral colours by saturation/value, classifies chromatic pixels by hue ranges, and returns the three strongest colours. Matching compares hue closeness and percentage difference—rather than matching colour labels alone. Change `saree.match.threshold=70` in `src/main/resources/application.properties` to tune the minimum score.
+```bash
+curl -X POST http://localhost:8080/api/sarees/reindex \
+  -H "X-Admin-Token: $SAREE_ADMIN_TOKEN"
+```
 
-## macOS (Apple Silicon) setup
-
-1. Install prerequisites:
-
-   ```bash
-   brew install openjdk@17 maven mysql
-   brew services start mysql
-   ```
-
-2. Create the database and set a MySQL password if needed:
-
-   ```bash
-   mysql -u root -p < database/schema.sql
-   ```
-
-3. Edit `src/main/resources/application.properties` and replace `YOUR_PASSWORD` with your MySQL password. The supplied JavaCPP OpenCV dependency downloads platform-native binaries automatically, so a separate OpenCV install is not required.
-
-4. Build and run:
-
-   ```bash
-   mvn clean package
-   mvn spring-boot:run
-   ```
-
-5. In another terminal, populate (or refresh) the MySQL colour index:
-
-   ```bash
-   curl -X POST http://localhost:8080/api/sarees/reindex
-   ```
-
-6. Open [http://localhost:8080](http://localhost:8080), choose a JPG/JPEG/PNG saree image, and select **Search sarees**.
-
-## APIs
+## API
 
 | Method | Endpoint | Purpose |
-| --- | --- | --- |
-| POST | `/api/sarees/search` | multipart field `image`; returns detected colours and ranked matches |
-| GET | `/api/sarees` | list indexed sarees |
-| GET | `/api/sarees/{id}` | get one saree |
-| POST | `/api/sarees/reindex` | scan `saree-images/` and insert/update colour metadata |
+|---|---|---|
+| POST | `/api/sarees/search` | Multipart image search; accepts optional `sareeType`, `fabric`, `pattern`, `occasion`, `maxPrice`, `inStockOnly`, `colourMode=balanced|swap` |
+| GET | `/api/sarees/{id}/similar?colourMode=swap` | Similar-design or different-colour recommendations |
+| PUT | `/api/sarees/{id}/metadata` | Protected catalogue metadata update |
+| POST | `/api/sarees/admin/upload` | Protected multipart image upload plus metadata |
+| POST | `/api/sarees/reindex` | Protected full image reindex |
+| GET | `/api/sarees/evaluation/report` | Catalogue-quality metrics |
+| GET | `/actuator/health` | Deployment health probe |
 
-The local images are served at `/saree-images/**` by `WebConfig`; only file paths and colour metadata are stored in MySQL, not image blobs.
+Send `X-Admin-Token` to every write endpoint. Example metadata payload:
 
-## Testing
+```json
+{"sareeType":"Kanjivaram","fabric":"Silk","pattern":"Floral","occasion":"Wedding","price":8999,"inStock":true}
+```
 
-- Upload a red saree: red matches should appear after indexing.
-- Upload a blue saree: blue matches should appear when blue sarees are in the dataset.
-- Upload a colour absent from the collection: the page shows “No matching saree found in the database.”
-- Upload a PDF or other invalid file: the page rejects it with the supported-format message.
+## Evaluation
 
-## Troubleshooting
-
-- **Database connection error:** verify MySQL is running and the password in `application.properties` is correct.
-- **No results from every search:** call `POST /api/sarees/reindex`, then confirm it reports a non-zero indexed count.
-- **A newly added image does not appear:** put it under `saree-images/`, then run reindex again.
-- **Maven cannot find Java 17:** run `export JAVA_HOME=$(/usr/libexec/java_home -v 17)` before Maven.
-
-## Future AI upgrade
-
-The controller response and repository boundary allow an additional image-embedding service later. Add CLIP or Sentence Transformers embeddings, save vectors in Milvus, FAISS, or Qdrant, then combine vector similarity with this colour score to search design, pattern, and fabric texture as well as colour.
+The report endpoint measures metadata and design-signature coverage. For retrieval quality, maintain a small labelled set of query image → relevant catalogue IDs and track Top-1/Top-5 relevance before changing the descriptor or match threshold.
